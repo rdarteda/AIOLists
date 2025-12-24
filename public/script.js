@@ -361,7 +361,17 @@ document.addEventListener('DOMContentLoaded', function() {
     searchTmdb: document.getElementById('searchTmdb'),
     mergedSearchTmdb: document.getElementById('mergedSearchTmdb'),
     animeSearchEnabled: document.getElementById('animeSearchEnabled'),
-    searchNotification: document.getElementById('searchNotification')
+    searchNotification: document.getElementById('searchNotification'),
+    // Group Prefix Manager elements
+    groupPrefixSection: document.querySelector('.group-prefix-section'),
+    groupPrefixHeader: document.getElementById('groupPrefixHeader'),
+    groupPrefixContent: document.getElementById('groupPrefixContent'),
+    groupPrefixArrow: document.querySelector('.group-prefix-section .collapsible-arrow'),
+    groupPrefixList: document.getElementById('groupPrefixList'),
+    newGroupPrefix: document.getElementById('newGroupPrefix'),
+    newGroupLabel: document.getElementById('newGroupLabel'),
+    addGroupBtn: document.getElementById('addGroupBtn'),
+    groupPrefixNotification: document.getElementById('groupPrefixNotification')
   };
 
   async function init() {
@@ -792,7 +802,13 @@ document.addEventListener('DOMContentLoaded', function() {
     elements.toggleGenreFilterBtn?.addEventListener('click', handleToggleGenreFilter);
     elements.toggleRandomListBtn?.addEventListener('click', handleToggleRandomListFeature);
     elements.settingsHeader?.addEventListener('click', toggleSettingsSection);
-    
+
+    // Group Prefix Manager event listeners
+    elements.groupPrefixHeader?.addEventListener('click', toggleGroupPrefixSection);
+    elements.addGroupBtn?.addEventListener('click', handleAddGroup);
+    elements.newGroupPrefix?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleAddGroup(); });
+    elements.newGroupLabel?.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleAddGroup(); });
+
     // Search provider event listeners
     elements.searchCinemeta?.addEventListener('change', saveSearchPreferences);
     elements.searchTrakt?.addEventListener('change', saveSearchPreferences);
@@ -814,6 +830,193 @@ document.addEventListener('DOMContentLoaded', function() {
     const isOpen = elements.settingsSection.classList.toggle('open');
     elements.settingsContent.style.display = isOpen ? 'block' : 'none';
     elements.settingsArrow.textContent = isOpen ? '▼' : '▶';
+  }
+
+  // ============================================
+  // Group Prefix Manager Functions
+  // ============================================
+
+  function toggleGroupPrefixSection() {
+    const isOpen = elements.groupPrefixSection.classList.toggle('open');
+    elements.groupPrefixContent.style.display = isOpen ? 'block' : 'none';
+    elements.groupPrefixArrow.textContent = isOpen ? '▼' : '▶';
+  }
+
+  function renderGroupPrefixes() {
+    if (!elements.groupPrefixList) return;
+
+    const groups = state.userConfig.groupPrefixes || [];
+    elements.groupPrefixList.innerHTML = '';
+
+    groups.forEach(group => {
+      const item = document.createElement('div');
+      item.className = 'group-prefix-item';
+      item.dataset.groupId = group.id;
+      item.innerHTML = `
+        <span class="group-prefix-text">${escapeHtml(group.prefix)}</span>
+        <span class="group-label-text">${escapeHtml(group.label)}</span>
+        <div class="group-actions">
+          <button class="remove-group-btn" title="Remove group">❌</button>
+        </div>
+      `;
+
+      // Add remove handler
+      item.querySelector('.remove-group-btn').addEventListener('click', () => handleRemoveGroup(group.id));
+      elements.groupPrefixList.appendChild(item);
+    });
+  }
+
+  async function handleAddGroup() {
+    const prefix = elements.newGroupPrefix?.value?.trim();
+    const label = elements.newGroupLabel?.value?.trim();
+
+    if (!prefix || !label) {
+      showNotification('groupPrefix', 'Please enter both prefix and label', 'warning');
+      return;
+    }
+
+    // Ensure prefix ends with underscore for consistency
+    const normalizedPrefix = prefix.endsWith('_') ? prefix : prefix + '_';
+
+    try {
+      const response = await fetch(`/${state.configHash}/groups/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prefix: normalizedPrefix, label })
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        state.configHash = result.configHash;
+        updateUrlHash(result.configHash);
+
+        // Update local state
+        if (!state.userConfig.groupPrefixes) {
+          state.userConfig.groupPrefixes = [];
+        }
+        state.userConfig.groupPrefixes.push(result.group);
+
+        // Clear inputs and re-render
+        elements.newGroupPrefix.value = '';
+        elements.newGroupLabel.value = '';
+        renderGroupPrefixes();
+        renderLists(); // Re-render lists to update group dropdowns
+
+        showNotification('groupPrefix', `Group "${label}" added`, 'success');
+      } else {
+        showNotification('groupPrefix', result.error || 'Failed to add group', 'error');
+      }
+    } catch (error) {
+      console.error('Error adding group:', error);
+      showNotification('groupPrefix', 'Failed to add group', 'error');
+    }
+  }
+
+  async function handleRemoveGroup(groupId) {
+    const group = state.userConfig.groupPrefixes?.find(g => g.id === groupId);
+    if (!group) return;
+
+    if (!confirm(`Remove group "${group.label}"? Catalogs in this group will have their prefix removed.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/${state.configHash}/groups/remove`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId })
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        state.configHash = result.configHash;
+        updateUrlHash(result.configHash);
+
+        // Update local state
+        state.userConfig.groupPrefixes = state.userConfig.groupPrefixes.filter(g => g.id !== groupId);
+
+        // Remove catalog associations for this group
+        if (state.userConfig.catalogGroups) {
+          for (const catalogId in state.userConfig.catalogGroups) {
+            if (state.userConfig.catalogGroups[catalogId] === groupId) {
+              delete state.userConfig.catalogGroups[catalogId];
+            }
+          }
+        }
+
+        renderGroupPrefixes();
+        renderLists(); // Re-render lists to update group dropdowns
+
+        showNotification('groupPrefix', `Group "${group.label}" removed`, 'success');
+      } else {
+        showNotification('groupPrefix', result.error || 'Failed to remove group', 'error');
+      }
+    } catch (error) {
+      console.error('Error removing group:', error);
+      showNotification('groupPrefix', 'Failed to remove group', 'error');
+    }
+  }
+
+  async function handleGroupAssign(catalogId, groupId, currentName) {
+    try {
+      const response = await fetch(`/${state.configHash}/groups/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ catalogId, groupId, currentName })
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        state.configHash = result.configHash;
+        updateUrlHash(result.configHash);
+
+        // Update local state
+        if (!state.userConfig.catalogGroups) {
+          state.userConfig.catalogGroups = {};
+        }
+
+        if (groupId) {
+          state.userConfig.catalogGroups[String(catalogId)] = groupId;
+        } else {
+          delete state.userConfig.catalogGroups[String(catalogId)];
+        }
+
+        // Update customListNames
+        if (result.newName) {
+          if (!state.userConfig.customListNames) {
+            state.userConfig.customListNames = {};
+          }
+          state.userConfig.customListNames[String(catalogId)] = result.newName;
+
+          // Update the list in state.currentLists
+          const listInState = state.currentLists.find(l => String(l.id) === String(catalogId));
+          if (listInState) {
+            listInState.customName = result.newName;
+          }
+        }
+
+        renderLists(); // Re-render to show updated name
+
+        const group = state.userConfig.groupPrefixes?.find(g => g.id === groupId);
+        const message = groupId ? `Assigned to "${group?.label || 'group'}"` : 'Removed from group';
+        showNotification('lists', message, 'success');
+      } else {
+        showNotification('lists', result.error || 'Failed to update group', 'error');
+      }
+    } catch (error) {
+      console.error('Error assigning group:', error);
+      showNotification('lists', 'Failed to update group', 'error');
+    }
+  }
+
+  // Helper function to escape HTML
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   async function handleUniversalPaste(event) {
@@ -1154,6 +1357,7 @@ document.addEventListener('DOMContentLoaded', function() {
       updateGenreFilterButtonText();
       updateRandomListButtonState();
       updateSearchSourcesUI();
+      renderGroupPrefixes();
 
       if (mdblistApiKey || rpdbApiKey) {
         await validateAndSaveApiKeys(mdblistApiKey, rpdbApiKey, '', true);
@@ -1816,6 +2020,45 @@ document.addEventListener('DOMContentLoaded', function() {
          else if (apiKeyMissing && isRandomCatalog && !state.userConfig.apiKey) sortControlsContainer.style.display = 'none';
     }
 
+    // Group assignment dropdown
+    let groupSelect = null;
+    const groups = state.userConfig.groupPrefixes || [];
+    if (groups.length > 0 && !isRandomCatalog) {
+      groupSelect = document.createElement('select');
+      groupSelect.className = 'group-select';
+      groupSelect.title = 'Assign to group';
+
+      // Add "No Group" option
+      const noGroupOption = document.createElement('option');
+      noGroupOption.value = '';
+      noGroupOption.textContent = '— No Group —';
+      groupSelect.appendChild(noGroupOption);
+
+      // Add group options
+      groups.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group.id;
+        option.textContent = group.label;
+        groupSelect.appendChild(option);
+      });
+
+      // Set current value
+      const currentGroupId = state.userConfig.catalogGroups?.[String(list.id)] || '';
+      groupSelect.value = currentGroupId;
+
+      // Handle change
+      groupSelect.addEventListener('change', (e) => {
+        e.stopPropagation();
+        const selectedGroupId = e.target.value || null;
+        const currentName = list.customName || list.name;
+        handleGroupAssign(String(list.id), selectedGroupId, currentName);
+      });
+
+      if (apiKeyMissing && state.isPotentiallySharedConfig) {
+        groupSelect.style.display = 'none';
+      }
+    }
+
     if (state.isMobile) {
         li.classList.add('mobile-list-item');
         const mobileLayoutContainer = document.createElement('div');
@@ -1867,6 +2110,7 @@ document.addEventListener('DOMContentLoaded', function() {
         bottomRow.className = 'mobile-bottom-row';
         const actionsGroup = document.createElement('div');
         actionsGroup.className = 'list-actions-group mobile-actions-group';
+        if (groupSelect) actionsGroup.appendChild(groupSelect);
         if (mergeToggle) actionsGroup.appendChild(mergeToggle);
         if (sortControlsContainer) actionsGroup.appendChild(sortControlsContainer);
         actionsGroup.appendChild(visibilityToggleBtn);
@@ -1908,6 +2152,7 @@ document.addEventListener('DOMContentLoaded', function() {
         nameContainer.appendChild(nameSpan);
 
         const actionsGroup = document.createElement('div'); actionsGroup.className = 'list-actions-group';
+        if (groupSelect) actionsGroup.appendChild(groupSelect);
         if (mergeToggle) actionsGroup.appendChild(mergeToggle);
         if (sortControlsContainer) actionsGroup.appendChild(sortControlsContainer);
         actionsGroup.appendChild(visibilityToggleBtn);

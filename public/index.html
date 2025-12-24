@@ -264,6 +264,47 @@
         </div>
     </div>
 
+    <div class="group-prefix-section api-section">
+      <div class="collapsible-header" id="groupPrefixHeader">
+        <span class="collapsible-arrow">▶</span>
+        <h2>Catalog Groups</h2>
+        <span id="groupPrefixNotification" class="section-notification"></span>
+      </div>
+      <div class="collapsible-content" id="groupPrefixContent">
+        <p class="info-text">
+          Organize catalogs into groups using name prefixes. In Omni (Apple TV), create Groups with regex filters
+          like <code>^Kids_</code> to automatically group all catalogs starting with "Kids_".
+        </p>
+
+        <div class="group-prefix-manager">
+          <div class="group-list-header">
+            <span class="group-col-prefix">Prefix</span>
+            <span class="group-col-label">Display Label</span>
+            <span class="group-col-actions">Actions</span>
+          </div>
+          <div id="groupPrefixList" class="group-prefix-list">
+            <!-- Group items will be rendered here by JavaScript -->
+          </div>
+          <div class="add-group-row">
+            <input type="text" id="newGroupPrefix" class="group-input" placeholder="Kids_" maxlength="20">
+            <input type="text" id="newGroupLabel" class="group-input" placeholder="Kids Content" maxlength="30">
+            <button type="button" id="addGroupBtn" class="action-btn add-group-btn">+ Add Group</button>
+          </div>
+        </div>
+
+        <details class="group-help-details">
+          <summary>How to use with Omni</summary>
+          <div class="group-help-content">
+            <p>1. Define your groups above (e.g., prefix: <code>Kids_</code>, label: "Kids Content")</p>
+            <p>2. Assign groups to catalogs in the "Manage Your Lists" section below</p>
+            <p>3. In Omni, go to <strong>Settings → Groups</strong> and create a new group</p>
+            <p>4. Set the regex filter to match your prefix: <code>^Kids_</code></p>
+            <p>5. All catalogs with that prefix will automatically appear in the group</p>
+          </div>
+        </details>
+      </div>
+    </div>
+
     <div id="listContainer" class="list-container hidden">
       <div class="list-heading">
         <h2>Manage Your Lists</h2>

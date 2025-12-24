@@ -1319,3 +1319,245 @@ button:active, .action-btn:active, .trakt-login-btn:active, .stremio-refresh-btn
   margin: 0;
   cursor: pointer;
 }
+
+/* ============================================
+   Group Prefix Manager Styles
+   ============================================ */
+
+.group-prefix-section {
+  margin-bottom: 20px;
+}
+
+.group-prefix-manager {
+  margin-top: 15px;
+}
+
+.group-list-header {
+  display: grid;
+  grid-template-columns: 150px 1fr 80px;
+  gap: 10px;
+  padding: 8px 12px;
+  background-color: #f8f8f8;
+  border-radius: 4px 4px 0 0;
+  border: 1px solid #e0e0e0;
+  border-bottom: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+}
+
+.group-prefix-list {
+  border: 1px solid #e0e0e0;
+  border-radius: 0;
+  min-height: 20px;
+}
+
+.group-prefix-list:empty::before {
+  content: "No groups defined yet";
+  display: block;
+  padding: 15px;
+  text-align: center;
+  color: #999;
+  font-style: italic;
+  font-size: 13px;
+}
+
+.group-prefix-item {
+  display: grid;
+  grid-template-columns: 150px 1fr 80px;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  align-items: center;
+  transition: background-color 0.15s ease;
+}
+
+.group-prefix-item:last-child {
+  border-bottom: none;
+}
+
+.group-prefix-item:hover {
+  background-color: #fafafa;
+}
+
+.group-prefix-item .group-prefix-text {
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-size: 13px;
+  color: #8E5AF7;
+  font-weight: 500;
+  background-color: #f5f0ff;
+  padding: 4px 8px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.group-prefix-item .group-label-text {
+  font-size: 14px;
+  color: #333;
+}
+
+.group-prefix-item .group-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.group-prefix-item .remove-group-btn {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 14px;
+  transition: color 0.15s ease;
+}
+
+.group-prefix-item .remove-group-btn:hover {
+  color: #f44336;
+  background: none;
+}
+
+.add-group-row {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  gap: 10px;
+  padding: 12px;
+  background-color: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  align-items: center;
+}
+
+.group-input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.group-input:focus {
+  outline: none;
+  border-color: #8E5AF7;
+  box-shadow: 0 0 0 2px rgba(142, 90, 247, 0.2);
+}
+
+.group-input::placeholder {
+  color: #bbb;
+}
+
+.add-group-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.group-help-details {
+  margin-top: 15px;
+  font-size: 13px;
+}
+
+.group-help-details summary {
+  cursor: pointer;
+  color: #8E5AF7;
+  font-weight: 500;
+  padding: 8px 0;
+  user-select: none;
+}
+
+.group-help-details summary:hover {
+  text-decoration: underline;
+}
+
+.group-help-content {
+  padding: 12px 16px;
+  background-color: #f8f8f8;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.group-help-content p {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.group-help-content code {
+  background-color: #e8e0f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  font-size: 12px;
+  color: #6b4db8;
+}
+
+/* Group dropdown in catalog list */
+.group-select {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  background-color: white;
+  cursor: pointer;
+  min-width: 100px;
+  max-width: 140px;
+  transition: border-color 0.15s ease;
+}
+
+.group-select:hover {
+  border-color: #8E5AF7;
+}
+
+.group-select:focus {
+  outline: none;
+  border-color: #8E5AF7;
+  box-shadow: 0 0 0 2px rgba(142, 90, 247, 0.2);
+}
+
+.group-select option {
+  padding: 4px;
+}
+
+/* Adjust list item layout to accommodate group column */
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.list-item .group-select {
+  flex-shrink: 0;
+}
+
+/* Responsive adjustments for group prefix manager */
+@media (max-width: 600px) {
+  .group-list-header {
+    grid-template-columns: 100px 1fr 60px;
+    font-size: 11px;
+  }
+
+  .group-prefix-item {
+    grid-template-columns: 100px 1fr 60px;
+    padding: 8px 10px;
+  }
+
+  .add-group-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .add-group-row .group-input {
+    width: 100%;
+  }
+
+  .add-group-row .add-group-btn {
+    width: 100%;
+  }
+
+  .group-select {
+    min-width: 80px;
+    max-width: 100px;
+    font-size: 11px;
+  }
+}

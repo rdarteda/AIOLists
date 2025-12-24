@@ -49,6 +49,9 @@ const defaultConfig = {
   customMediaTypeNames: {},
   importedAddons: {},
   sortPreferences: {},
+  // Group Prefix Manager - for Omni Groups integration
+  groupPrefixes: [],        // Array of { id: string, prefix: string, label: string }
+  catalogGroups: {},        // Object mapping catalogId -> groupId
   disableGenreFilter: false,
   enableRandomListFeature: false,
   randomMDBListUsernames: ['showtime416', 'garycrawfordgc', 'linaspurinis', 'hdlists'],

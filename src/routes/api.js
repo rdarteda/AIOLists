@@ -1350,6 +1350,179 @@ module.exports = function(router) {
     }
   });
 
+  // ============================================
+  // Group Prefix Management Endpoints
+  // ============================================
+
+  // Add a new group prefix
+  router.post('/:configHash/groups/add', async (req, res) => {
+    try {
+      const { prefix, label } = req.body;
+      if (!prefix || !label) {
+        return res.status(400).json({ error: 'Prefix and label are required' });
+      }
+
+      const trimmedPrefix = prefix.trim();
+      const trimmedLabel = label.trim();
+
+      if (!trimmedPrefix || !trimmedLabel) {
+        return res.status(400).json({ error: 'Prefix and label cannot be empty' });
+      }
+
+      // Initialize groupPrefixes if not exists
+      if (!req.userConfig.groupPrefixes) {
+        req.userConfig.groupPrefixes = [];
+      }
+
+      // Check for duplicate prefix
+      const existingPrefix = req.userConfig.groupPrefixes.find(
+        g => g.prefix.toLowerCase() === trimmedPrefix.toLowerCase()
+      );
+      if (existingPrefix) {
+        return res.status(400).json({ error: 'A group with this prefix already exists' });
+      }
+
+      // Generate unique ID
+      const groupId = `group_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      // Add new group
+      req.userConfig.groupPrefixes.push({
+        id: groupId,
+        prefix: trimmedPrefix,
+        label: trimmedLabel
+      });
+
+      const newConfigHash = await updateConfigLightweight(req.userConfig, {}, 'group prefix added');
+      res.json({
+        success: true,
+        configHash: newConfigHash,
+        group: { id: groupId, prefix: trimmedPrefix, label: trimmedLabel },
+        message: 'Group prefix added'
+      });
+    } catch (error) {
+      console.error('[GROUPS] Failed to add group prefix:', error);
+      res.status(500).json({ error: 'Failed to add group prefix' });
+    }
+  });
+
+  // Remove a group prefix
+  router.post('/:configHash/groups/remove', async (req, res) => {
+    try {
+      const { groupId } = req.body;
+      if (!groupId) {
+        return res.status(400).json({ error: 'Group ID is required' });
+      }
+
+      if (!req.userConfig.groupPrefixes) {
+        return res.status(404).json({ error: 'No groups found' });
+      }
+
+      const groupIndex = req.userConfig.groupPrefixes.findIndex(g => g.id === groupId);
+      if (groupIndex === -1) {
+        return res.status(404).json({ error: 'Group not found' });
+      }
+
+      const removedGroup = req.userConfig.groupPrefixes[groupIndex];
+
+      // Remove the group
+      req.userConfig.groupPrefixes.splice(groupIndex, 1);
+
+      // Also remove any catalog-group associations for this group
+      if (req.userConfig.catalogGroups) {
+        for (const catalogId in req.userConfig.catalogGroups) {
+          if (req.userConfig.catalogGroups[catalogId] === groupId) {
+            delete req.userConfig.catalogGroups[catalogId];
+          }
+        }
+      }
+
+      const newConfigHash = await updateConfigLightweight(req.userConfig, {}, 'group prefix removed');
+      res.json({
+        success: true,
+        configHash: newConfigHash,
+        removedGroup,
+        message: 'Group prefix removed'
+      });
+    } catch (error) {
+      console.error('[GROUPS] Failed to remove group prefix:', error);
+      res.status(500).json({ error: 'Failed to remove group prefix' });
+    }
+  });
+
+  // Assign a catalog to a group (with auto-prefix)
+  router.post('/:configHash/groups/assign', async (req, res) => {
+    try {
+      const { catalogId, groupId, currentName } = req.body;
+      if (!catalogId) {
+        return res.status(400).json({ error: 'Catalog ID is required' });
+      }
+
+      // Initialize structures if needed
+      if (!req.userConfig.catalogGroups) {
+        req.userConfig.catalogGroups = {};
+      }
+      if (!req.userConfig.customListNames) {
+        req.userConfig.customListNames = {};
+      }
+
+      const catalogIdStr = String(catalogId);
+      const currentCustomName = req.userConfig.customListNames[catalogIdStr] || currentName || '';
+
+      // Get the old group (if any) to remove its prefix
+      const oldGroupId = req.userConfig.catalogGroups[catalogIdStr];
+      let oldPrefix = '';
+      if (oldGroupId && req.userConfig.groupPrefixes) {
+        const oldGroup = req.userConfig.groupPrefixes.find(g => g.id === oldGroupId);
+        if (oldGroup) {
+          oldPrefix = oldGroup.prefix;
+        }
+      }
+
+      // Remove old prefix from name if present
+      let newName = currentCustomName;
+      if (oldPrefix && newName.startsWith(oldPrefix)) {
+        newName = newName.substring(oldPrefix.length);
+      }
+
+      // If groupId is null/empty, we're just removing the group assignment
+      if (!groupId) {
+        delete req.userConfig.catalogGroups[catalogIdStr];
+        // Update name without prefix
+        if (newName && newName.trim()) {
+          req.userConfig.customListNames[catalogIdStr] = newName.trim();
+        }
+      } else {
+        // Find the new group
+        const newGroup = req.userConfig.groupPrefixes?.find(g => g.id === groupId);
+        if (!newGroup) {
+          return res.status(404).json({ error: 'Group not found' });
+        }
+
+        // Assign the catalog to the group
+        req.userConfig.catalogGroups[catalogIdStr] = groupId;
+
+        // Add new prefix to name (if not already present)
+        if (!newName.startsWith(newGroup.prefix)) {
+          newName = newGroup.prefix + newName;
+        }
+        req.userConfig.customListNames[catalogIdStr] = newName.trim();
+      }
+
+      const newConfigHash = await updateConfigLightweight(req.userConfig, {}, 'catalog group assignment');
+      clearManifestCache('catalog group assignment');
+
+      res.json({
+        success: true,
+        configHash: newConfigHash,
+        newName: req.userConfig.customListNames[catalogIdStr] || newName,
+        message: groupId ? 'Catalog assigned to group' : 'Catalog removed from group'
+      });
+    } catch (error) {
+      console.error('[GROUPS] Failed to assign catalog to group:', error);
+      res.status(500).json({ error: 'Failed to assign catalog to group' });
+    }
+  });
+
   router.post('/:configHash/upstash/check', async (req, res) => {
     const { upstashUrl, upstashToken } = req.body;
     try {
