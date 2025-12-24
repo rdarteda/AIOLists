@@ -35,14 +35,45 @@ function clearPosterCache() {
  */
 async function validateRPDBKey(rpdbApiKey) {
   if (!rpdbApiKey) return false;
-  
+
   try {
     const response = await axios.get(`https://api.ratingposterdb.com/${rpdbApiKey}/isValid`, {
-      timeout: 15000
+      timeout: 15000,
+      validateStatus: () => true // Accept all status codes to handle them manually
     });
-    
-    return response.status === 200 && response.data && response.data.valid === true;
+
+    // Check HTTP status code first
+    if (response.status !== 200) {
+      console.warn(`RPDB API returned status ${response.status} during key validation`);
+      return false;
+    }
+
+    // Check Content-Type header to ensure we're getting JSON
+    const contentType = response.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      console.warn(`RPDB API returned unexpected Content-Type: ${contentType}`);
+      return false;
+    }
+
+    // Safely check if response.data is valid JSON object
+    if (response.data && typeof response.data === 'object') {
+      return response.data.valid === true;
+    }
+
+    // If response.data is a string, try to parse it as JSON
+    if (typeof response.data === 'string') {
+      try {
+        const parsed = JSON.parse(response.data);
+        return parsed.valid === true;
+      } catch (parseError) {
+        console.warn('RPDB API returned non-JSON response:', response.data.substring(0, 100));
+        return false;
+      }
+    }
+
+    return false;
   } catch (error) {
+    // Handle network errors, timeouts, and other axios errors gracefully
     console.error('RPDB key validation error:', error.message);
     return false;
   }

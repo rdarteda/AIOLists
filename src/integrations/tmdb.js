@@ -66,13 +66,13 @@ async function createTmdbRequestToken(userBearerToken) {
  * Create TMDB session ID from approved request token (Step 3)
  * @param {string} requestToken - Approved request token from TMDB
  * @param {string} userBearerToken - User's TMDB Read Access Token
- * @returns {Promise<Object>} Session data
+ * @returns {Promise<Object>} Session data with success status
  */
 async function createTmdbSession(requestToken, userBearerToken) {
   if (!userBearerToken) {
-    throw new Error('TMDB Bearer Token is required');
+    return { success: false, error: 'TMDB Bearer Token is required' };
   }
-  
+
   try {
     const response = await axios.post(`${TMDB_BASE_URL_V3}/authentication/session/new`, {
       request_token: requestToken
@@ -82,19 +82,41 @@ async function createTmdbSession(requestToken, userBearerToken) {
         'content-type': 'application/json',
         'Authorization': `Bearer ${userBearerToken}`
       },
-      timeout: TMDB_REQUEST_TIMEOUT
+      timeout: TMDB_REQUEST_TIMEOUT,
+      validateStatus: () => true // Accept all status codes to handle them manually
     });
 
-    if (response.data && response.data.success) {
+    // Check HTTP status code first
+    if (response.status !== 200) {
+      const errorMsg = response.data?.status_message || `HTTP ${response.status}`;
+      console.warn(`TMDB session creation returned status ${response.status}: ${errorMsg}`);
+      return { success: false, error: `TMDB authentication failed: ${errorMsg}` };
+    }
+
+    // Check Content-Type header to ensure we're getting JSON
+    const contentType = response.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      console.warn(`TMDB API returned unexpected Content-Type: ${contentType}`);
+      return { success: false, error: 'TMDB returned an invalid response format' };
+    }
+
+    // Validate response data
+    if (response.data && typeof response.data === 'object' && response.data.success) {
       return {
         success: true,
         sessionId: response.data.session_id
       };
     }
-    throw new Error('Failed to create TMDB session');
+
+    // Handle TMDB error response format
+    const errorMessage = response.data?.status_message || 'Failed to create TMDB session';
+    console.warn('TMDB session creation failed:', errorMessage);
+    return { success: false, error: errorMessage };
+
   } catch (error) {
+    // Handle network errors, timeouts, and other axios errors gracefully
     console.error('Error creating TMDB session:', error.message);
-    throw new Error(`Failed to create TMDB session: ${error.message}`);
+    return { success: false, error: `Network error: ${error.message}` };
   }
 }
 
@@ -106,9 +128,11 @@ async function createTmdbSession(requestToken, userBearerToken) {
  */
 async function getTmdbAccountDetails(sessionId, userBearerToken) {
   if (!userBearerToken) {
-    throw new Error('TMDB Bearer Token is required');
+    const error = new Error('TMDB Bearer Token is required');
+    error.isUserFacing = true;
+    throw error;
   }
-  
+
   try {
     const response = await axios.get(`${TMDB_BASE_URL_V3}/account`, {
       params: {
@@ -118,13 +142,44 @@ async function getTmdbAccountDetails(sessionId, userBearerToken) {
         'accept': 'application/json',
         'Authorization': `Bearer ${userBearerToken}`
       },
-      timeout: TMDB_REQUEST_TIMEOUT
+      timeout: TMDB_REQUEST_TIMEOUT,
+      validateStatus: () => true // Accept all status codes to handle them manually
     });
 
-    return response.data;
+    // Check HTTP status code first
+    if (response.status !== 200) {
+      const errorMsg = response.data?.status_message || `HTTP ${response.status}`;
+      console.warn(`TMDB account details returned status ${response.status}: ${errorMsg}`);
+      const error = new Error(`Failed to get TMDB account: ${errorMsg}`);
+      error.isUserFacing = true;
+      throw error;
+    }
+
+    // Check Content-Type header
+    const contentType = response.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      console.warn(`TMDB API returned unexpected Content-Type: ${contentType}`);
+      const error = new Error('TMDB returned an invalid response format');
+      error.isUserFacing = true;
+      throw error;
+    }
+
+    if (response.data && typeof response.data === 'object') {
+      return response.data;
+    }
+
+    const error = new Error('Invalid account data received from TMDB');
+    error.isUserFacing = true;
+    throw error;
+
   } catch (error) {
+    if (error.isUserFacing) {
+      throw error;
+    }
     console.error('Error getting TMDB account details:', error.message);
-    throw new Error(`Failed to get TMDB account details: ${error.message}`);
+    const friendlyError = new Error(`Failed to get TMDB account details: ${error.message}`);
+    friendlyError.isUserFacing = true;
+    throw friendlyError;
   }
 }
 
@@ -144,15 +199,34 @@ async function getTmdbAuthUrl(userBearerToken) {
  * @returns {Promise<Object>} Authentication result with session ID and account details
  */
 async function authenticateTmdb(requestToken, userBearerToken) {
-  const sessionData = await createTmdbSession(requestToken, userBearerToken);
-  const accountData = await getTmdbAccountDetails(sessionData.sessionId, userBearerToken);
-  
-  return {
-    sessionId: sessionData.sessionId,
-    accountId: accountData.id,
-    username: accountData.username,
-    name: accountData.name
-  };
+  try {
+    const sessionData = await createTmdbSession(requestToken, userBearerToken);
+
+    // Check if session creation was successful
+    if (!sessionData.success) {
+      const error = new Error(sessionData.error || 'Failed to create TMDB session');
+      error.isUserFacing = true;
+      throw error;
+    }
+
+    const accountData = await getTmdbAccountDetails(sessionData.sessionId, userBearerToken);
+
+    return {
+      sessionId: sessionData.sessionId,
+      accountId: accountData.id,
+      username: accountData.username,
+      name: accountData.name
+    };
+  } catch (error) {
+    // Re-throw with user-friendly message if not already set
+    if (!error.isUserFacing) {
+      console.error('TMDB authentication error:', error.message);
+      const friendlyError = new Error(`TMDB authentication failed: ${error.message}`);
+      friendlyError.isUserFacing = true;
+      throw friendlyError;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -484,18 +558,49 @@ async function validateTMDBKey(userBearerToken) {
   if (!userBearerToken) {
     return false;
   }
-  
+
   try {
     const response = await axios.get(`${TMDB_BASE_URL_V3}/configuration`, {
       headers: {
         'accept': 'application/json',
         'Authorization': `Bearer ${userBearerToken}`
       },
-      timeout: 10000
+      timeout: 10000,
+      validateStatus: () => true // Accept all status codes to handle them manually
     });
-    
-    return response.status === 200 && response.data;
+
+    // Check HTTP status code first
+    if (response.status !== 200) {
+      console.warn(`TMDB API validation returned status ${response.status}`);
+      return false;
+    }
+
+    // Check Content-Type header to ensure we're getting JSON
+    const contentType = response.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      console.warn(`TMDB API returned unexpected Content-Type: ${contentType}`);
+      return false;
+    }
+
+    // Validate response data
+    if (response.data && typeof response.data === 'object') {
+      return true;
+    }
+
+    // If response.data is a string, try to parse it
+    if (typeof response.data === 'string') {
+      try {
+        JSON.parse(response.data);
+        return true;
+      } catch (parseError) {
+        console.warn('TMDB API returned non-JSON response');
+        return false;
+      }
+    }
+
+    return false;
   } catch (error) {
+    // Handle network errors, timeouts, and other axios errors gracefully
     console.error('TMDB API connectivity test error:', error.message);
     return false;
   }

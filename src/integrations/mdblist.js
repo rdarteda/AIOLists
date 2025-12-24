@@ -11,9 +11,43 @@ const INITIAL_RETRY_DELAY_MS = 5000;
 async function validateMDBListKey(apiKey) {
   if (!apiKey) return null;
   try {
-    const response = await axios.get(`https://api.mdblist.com/user?apikey=${apiKey}`, { timeout: 5000 });
-    return (response.status === 200 && response.data) ? response.data : null;
+    const response = await axios.get(`https://api.mdblist.com/user?apikey=${apiKey}`, {
+      timeout: 5000,
+      validateStatus: () => true // Accept all status codes to handle them manually
+    });
+
+    // Check HTTP status code first
+    if (response.status !== 200) {
+      console.warn(`MDBList API returned status ${response.status} during key validation`);
+      return null;
+    }
+
+    // Check Content-Type header to ensure we're getting JSON
+    const contentType = response.headers['content-type'] || '';
+    if (!contentType.includes('application/json')) {
+      console.warn(`MDBList API returned unexpected Content-Type: ${contentType}`);
+      return null;
+    }
+
+    // Safely access response data
+    if (response.data && typeof response.data === 'object') {
+      return response.data;
+    }
+
+    // If response.data is a string, try to parse it as JSON
+    if (typeof response.data === 'string') {
+      try {
+        const parsed = JSON.parse(response.data);
+        return parsed;
+      } catch (parseError) {
+        console.warn('MDBList API returned non-JSON response:', response.data.substring(0, 100));
+        return null;
+      }
+    }
+
+    return null;
   } catch (error) {
+    // Handle network errors, timeouts, and other axios errors gracefully
     console.error('Error validating MDBList Key:', error.message);
     return null;
   }
